@@ -1,35 +1,9 @@
-const STORAGE_KEY = "tiny-diary.entries.v1";
+const STORAGE_KEY = "study-log.entries.v1";
 
-const moods = {
-  happy: {
-    label: "うれしい",
-    face: "😊",
-    score: 5,
-  },
-  calm: {
-    label: "おだやか",
-    face: "😌",
-    score: 4,
-  },
-  normal: {
-    label: "ふつう",
-    face: "🙂",
-    score: 3,
-  },
-  tired: {
-    label: "つかれた",
-    face: "😵‍💫",
-    score: 2,
-  },
-  sad: {
-    label: "しょんぼり",
-    face: "🥲",
-    score: 1,
-  },
-};
-
-const form = document.querySelector("#diary-form");
+const form = document.querySelector("#study-form");
 const dateInput = document.querySelector("#entry-date");
+const subjectInput = document.querySelector("#entry-subject");
+const minutesInput = document.querySelector("#entry-minutes");
 const noteInput = document.querySelector("#entry-note");
 const clearButton = document.querySelector("#clear-button");
 const entryList = document.querySelector("#entry-list");
@@ -37,15 +11,15 @@ const emptyState = document.querySelector("#empty-state");
 const saveState = document.querySelector("#save-state");
 const charCount = document.querySelector("#char-count");
 const editingLabel = document.querySelector("#editing-label");
+const totalMinutes = document.querySelector("#total-minutes");
+const studyDays = document.querySelector("#study-days");
 const entryCount = document.querySelector("#entry-count");
 const summaryRow = document.querySelector("#summary-row");
 const searchInput = document.querySelector("#search-input");
-const moodFilter = document.querySelector("#mood-filter");
-const rhythmChart = document.querySelector("#rhythm-chart");
-const biorhythmMessage = document.querySelector("#biorhythm-message");
-const biorhythmDetail = document.querySelector("#biorhythm-detail");
+const subjectFilter = document.querySelector("#subject-filter");
 
 let entries = loadEntries();
+let editingEntryId = null;
 
 function loadEntries() {
   const rawEntries = localStorage.getItem(STORAGE_KEY);
@@ -56,7 +30,18 @@ function loadEntries() {
 
   try {
     const parsedEntries = JSON.parse(rawEntries);
-    return Array.isArray(parsedEntries) ? parsedEntries : [];
+    return Array.isArray(parsedEntries)
+      ? parsedEntries.filter(
+          (entry) =>
+            entry &&
+            typeof entry.id === "string" &&
+            typeof entry.date === "string" &&
+            typeof entry.subject === "string" &&
+            Number.isInteger(entry.minutes) &&
+            entry.minutes > 0 &&
+            typeof entry.note === "string",
+        )
+      : [];
   } catch {
     return [];
   }
@@ -84,43 +69,12 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function sortEntries() {
-  entries.sort((a, b) => b.date.localeCompare(a.date));
-}
-
-function getSelectedMood() {
-  return form.elements.mood.value;
-}
-
-function setSelectedMood(mood) {
-  const moodInput = form.querySelector(`input[name="mood"][value="${mood}"]`);
-
-  if (moodInput) {
-    moodInput.checked = true;
-  }
-}
-
-function clearSelectedMood() {
-  form.querySelectorAll('input[name="mood"]').forEach((input) => {
-    input.checked = false;
-  });
-}
-
 function formatDate(dateText) {
-  const date = parseIsoDate(dateText);
   return new Intl.DateTimeFormat("ja-JP", {
     month: "long",
     day: "numeric",
     weekday: "short",
-  }).format(date);
-}
-
-function formatShortDate(dateText) {
-  const date = parseIsoDate(dateText);
-  return new Intl.DateTimeFormat("ja-JP", {
-    month: "numeric",
-    day: "numeric",
-  }).format(date);
+  }).format(parseIsoDate(dateText));
 }
 
 function escapeHtml(text) {
@@ -134,15 +88,14 @@ function escapeHtml(text) {
 
 function getFilteredEntries() {
   const query = searchInput.value.trim().toLowerCase();
-  const selectedMood = moodFilter.value;
+  const selectedSubject = subjectFilter.value;
 
   return entries.filter((entry) => {
-    const mood = moods[entry.mood];
-    const matchesMood = selectedMood === "all" || entry.mood === selectedMood;
-    const searchableText = `${entry.date} ${entry.note} ${mood?.label ?? ""}`.toLowerCase();
+    const matchesSubject = selectedSubject === "all" || entry.subject === selectedSubject;
+    const searchableText = `${entry.date} ${entry.subject} ${entry.note}`.toLowerCase();
     const matchesQuery = !query || searchableText.includes(query);
 
-    return matchesMood && matchesQuery;
+    return matchesSubject && matchesQuery;
   });
 }
 
@@ -150,34 +103,35 @@ function renderEntries() {
   const filteredEntries = getFilteredEntries();
 
   entryList.innerHTML = filteredEntries
-    .map((entry) => {
-      const mood = moods[entry.mood] ?? moods.normal;
-
-      return `
+    .map(
+      (entry) => `
         <li class="entry-card">
           <div class="entry-topline">
             <span class="entry-date">${formatDate(entry.date)}</span>
-            <span class="mood-badge">${mood.face} ${mood.label}</span>
+            <span class="duration-badge">${entry.minutes}分</span>
           </div>
-          <p class="entry-note">${escapeHtml(entry.note)}</p>
+          <h3 class="entry-subject">${escapeHtml(entry.subject)}</h3>
+          ${entry.note ? `<p class="entry-note">${escapeHtml(entry.note)}</p>` : ""}
           <div class="entry-actions">
-            <button type="button" data-action="edit" data-date="${entry.date}">編集</button>
-            <button class="danger-button" type="button" data-action="delete" data-date="${entry.date}">削除</button>
+            <button type="button" data-action="edit" data-entry-id="${escapeHtml(entry.id)}">編集</button>
+            <button class="danger-button" type="button" data-action="delete" data-entry-id="${escapeHtml(entry.id)}">削除</button>
           </div>
         </li>
-      `;
-    })
+      `,
+    )
     .join("");
 
   if (entries.length > 0 && filteredEntries.length === 0) {
     emptyState.innerHTML = `
+      <span class="empty-mark" aria-hidden="true">⌕</span>
       <strong>条件に合う記録がありません</strong>
-      <span>検索ワードや気分フィルターを変えてみてください。</span>
+      <span>検索ワードや学習内容の絞り込みを変えてみてください。</span>
     `;
   } else {
     emptyState.innerHTML = `
-      <strong>まだ記録がありません</strong>
-      <span>今日の気分と一言メモを保存すると、ここに表示されます。</span>
+      <span class="empty-mark" aria-hidden="true">✎</span>
+      <strong>学習記録はまだありません</strong>
+      <span>今日取り組んだことを記録してみましょう。</span>
     `;
   }
 
@@ -186,204 +140,49 @@ function renderEntries() {
 }
 
 function renderSummary() {
-  entryCount.textContent = entries.length;
+  const total = entries.reduce((sum, entry) => sum + entry.minutes, 0);
+  const days = new Set(entries.map((entry) => entry.date)).size;
+  const subjectTotals = new Map();
 
-  summaryRow.innerHTML = Object.entries(moods)
-    .map(([moodKey, mood]) => {
-      const count = entries.filter((entry) => entry.mood === moodKey).length;
-      return `<span class="summary-chip">${mood.face} ${mood.label} ${count}</span>`;
-    })
-    .join("");
-}
-
-function renderBiorhythm() {
-  if (entries.length === 0) {
-    rhythmChart.innerHTML = "";
-    biorhythmMessage.textContent = "記録を保存すると表示されます";
-    biorhythmDetail.textContent = "最近7件の気分を波形グラフで表示します。";
-    return;
-  }
-
-  const recentEntries = [...entries]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 7)
-    .reverse();
-  const totalScore = recentEntries.reduce((sum, entry) => {
-    return sum + (moods[entry.mood]?.score ?? moods.normal.score);
-  }, 0);
-  const average = totalScore / recentEntries.length;
-  const firstScore = moods[recentEntries[0].mood]?.score ?? moods.normal.score;
-  const lastEntry = recentEntries[recentEntries.length - 1];
-  const lastScore = moods[lastEntry.mood]?.score ?? moods.normal.score;
-  const trend = lastScore - firstScore;
-
-  rhythmChart.innerHTML = createBiorhythmSvg(recentEntries);
-
-  biorhythmMessage.textContent = getBiorhythmMessage(trend, average, recentEntries.length);
-  biorhythmDetail.textContent = `最近${recentEntries.length}件の平均: ${average.toFixed(1)} / 5`;
-}
-
-function createBiorhythmSvg(recentEntries) {
-  const width = 360;
-  const height = 170;
-  const padding = {
-    top: 22,
-    right: 18,
-    bottom: 34,
-    left: 28,
-  };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-  const points = recentEntries.map((entry, index) => {
-    const mood = moods[entry.mood] ?? moods.normal;
-    const x =
-      recentEntries.length === 1
-        ? padding.left + chartWidth / 2
-        : padding.left + (chartWidth / (recentEntries.length - 1)) * index;
-    const y = padding.top + ((5 - mood.score) / 4) * chartHeight;
-
-    return {
-      x,
-      y,
-      entry,
-      mood,
-    };
+  entries.forEach((entry) => {
+    subjectTotals.set(entry.subject, (subjectTotals.get(entry.subject) ?? 0) + entry.minutes);
   });
-  const lastPoint = points[points.length - 1];
-  const lineShape =
-    points.length === 1
-      ? buildSinglePointWave(points[0], chartWidth)
-      : {
-          path: buildSmoothPath(points),
-          startX: points[0].x,
-          endX: lastPoint.x,
-        };
-  const areaPath = `${lineShape.path} L ${lineShape.endX} ${height - padding.bottom} L ${
-    lineShape.startX
-  } ${height - padding.bottom} Z`;
 
-  return `
-    <svg
-      class="rhythm-svg"
-      viewBox="0 0 ${width} ${height}"
-      role="img"
-      aria-label="最近${recentEntries.length}件の気分バイオリズム"
-    >
-      <defs>
-        <linearGradient id="rhythm-line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#6aa9ff" />
-          <stop offset="45%" stop-color="#79c7b3" />
-          <stop offset="75%" stop-color="#ffd166" />
-          <stop offset="100%" stop-color="#f47fa2" />
-        </linearGradient>
-        <linearGradient id="rhythm-area-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stop-color="#f47fa2" stop-opacity="0.24" />
-          <stop offset="100%" stop-color="#6aa9ff" stop-opacity="0.03" />
-        </linearGradient>
-      </defs>
-      <g class="rhythm-grid" aria-hidden="true">
-        <line x1="${padding.left}" y1="${padding.top}" x2="${width - padding.right}" y2="${padding.top}" />
-        <line x1="${padding.left}" y1="${padding.top + chartHeight / 2}" x2="${
-          width - padding.right
-        }" y2="${padding.top + chartHeight / 2}" />
-        <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${
-          height - padding.bottom
-        }" />
-      </g>
-      <path class="rhythm-area" d="${areaPath}" aria-hidden="true"></path>
-      <path class="rhythm-wave" d="${lineShape.path}" aria-hidden="true"></path>
-      ${points
-        .map((point) => {
-          return `
-            <g class="rhythm-point">
-              <circle cx="${point.x}" cy="${point.y}" r="4.6"></circle>
-              <text x="${point.x}" y="${point.y - 10}" text-anchor="middle">${point.mood.face}</text>
-              <text class="rhythm-axis-label" x="${point.x}" y="${height - 10}" text-anchor="middle">${formatShortDate(
-                point.entry.date,
-              )}</text>
-            </g>
-          `;
-        })
-        .join("")}
-    </svg>
-  `;
-}
+  totalMinutes.textContent = total.toLocaleString("ja-JP");
+  studyDays.textContent = days.toLocaleString("ja-JP");
+  entryCount.textContent = entries.length.toLocaleString("ja-JP");
+  summaryRow.innerHTML = [...subjectTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(
+      ([subject, minutes]) =>
+        `<span class="summary-chip">${escapeHtml(subject)} <strong>${minutes.toLocaleString("ja-JP")}分</strong></span>`,
+    )
+    .join("");
 
-function buildSmoothPath(points) {
-  return points.reduce((path, point, index) => {
-    if (index === 0) {
-      return `M ${point.x} ${point.y}`;
-    }
-
-    const previousPoint = points[index - 1];
-    const controlX = (previousPoint.x + point.x) / 2;
-    return `${path} C ${controlX} ${previousPoint.y}, ${controlX} ${point.y}, ${point.x} ${point.y}`;
-  }, "");
-}
-
-function buildSinglePointWave(point, chartWidth) {
-  const waveWidth = chartWidth * 0.56;
-  const startX = point.x - waveWidth / 2;
-  const endX = point.x + waveWidth / 2;
-  const lift = 24;
-
-  return {
-    path: `M ${startX} ${point.y} C ${startX + waveWidth * 0.25} ${point.y - lift}, ${
-      startX + waveWidth * 0.75
-    } ${point.y + lift}, ${endX} ${point.y}`,
-    startX,
-    endX,
-  };
-}
-
-function getBiorhythmMessage(trend, average, entryLength) {
-  if (entryLength === 1) {
-    return "最初のリズムを記録しました";
-  }
-
-  if (trend >= 2) {
-    return "上向きのリズム";
-  }
-
-  if (trend >= 0.5) {
-    return "少し上向き";
-  }
-
-  if (trend <= -2) {
-    return "休むサイン多め";
-  }
-
-  if (trend <= -0.5) {
-    return "少し下がり気味";
-  }
-
-  if (average >= 4) {
-    return "安定していい流れ";
-  }
-
-  if (average <= 2.2) {
-    return "ゆっくり整えたいリズム";
-  }
-
-  return "安定したリズム";
+  const currentSubject = subjectFilter.value;
+  const subjects = [...new Set(entries.map((entry) => entry.subject))].sort((a, b) =>
+    a.localeCompare(b, "ja"),
+  );
+  subjectFilter.replaceChildren(new Option("すべての学習", "all"));
+  subjects.forEach((subject) => {
+    subjectFilter.add(new Option(subject, subject));
+  });
+  subjectFilter.value = subjects.includes(currentSubject) ? currentSubject : "all";
 }
 
 function render() {
-  sortEntries();
+  entries.sort((a, b) => b.date.localeCompare(a.date));
   renderSummary();
-  renderBiorhythm();
   renderEntries();
 }
 
 function resetForm() {
   form.reset();
   dateInput.value = getTodayIso();
-  clearSelectedMood();
-  noteInput.value = "";
-  editingLabel.textContent = "今日の記録を書いています";
+  editingEntryId = null;
+  editingLabel.textContent = "新しい学習記録";
   updateCharCount();
-  updateSaveState("未保存");
-  renderBiorhythm();
+  updateSaveState("入力待ち");
 }
 
 function updateCharCount() {
@@ -395,33 +194,36 @@ function updateSaveState(text) {
 }
 
 function loadEntryIntoForm(entry) {
+  editingEntryId = entry.id;
   dateInput.value = entry.date;
-  setSelectedMood(entry.mood);
+  subjectInput.value = entry.subject;
+  minutesInput.value = entry.minutes;
   noteInput.value = entry.note;
   editingLabel.textContent = `${formatDate(entry.date)}の記録を編集中`;
   updateCharCount();
   updateSaveState("編集中");
-  renderBiorhythm();
 }
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const date = dateInput.value;
-  const mood = getSelectedMood();
+  const subject = subjectInput.value.trim();
+  const minutes = Number(minutesInput.value);
   const note = noteInput.value.trim();
 
-  if (!date || !mood || !note) {
+  if (!date || !subject || !Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
     updateSaveState("入力を確認");
     return;
   }
 
-  const existingIndex = entries.findIndex((entry) => entry.date === date);
+  const existingIndex = entries.findIndex((entry) => entry.id === editingEntryId);
   const now = new Date().toISOString();
   const nextEntry = {
     id: existingIndex >= 0 ? entries[existingIndex].id : createId(),
     date,
-    mood,
+    subject,
+    minutes,
     note,
     createdAt: existingIndex >= 0 ? entries[existingIndex].createdAt : now,
     updatedAt: now,
@@ -435,42 +237,44 @@ form.addEventListener("submit", (event) => {
 
   saveEntries();
   render();
-  loadEntryIntoForm(nextEntry);
-  updateSaveState("保存済み");
+  resetForm();
+  updateSaveState("保存しました");
 });
 
-dateInput.addEventListener("change", () => {
-  if (!dateInput.value) {
-    return;
-  }
-
-  const existingEntry = entries.find((entry) => entry.date === dateInput.value);
-
-  if (existingEntry) {
-    loadEntryIntoForm(existingEntry);
-    return;
-  }
-
-  clearSelectedMood();
-  noteInput.value = "";
-  editingLabel.textContent = `${formatDate(dateInput.value)}の記録を書いています`;
-  updateCharCount();
-  updateSaveState("未保存");
-  renderBiorhythm();
-});
+for (const input of [dateInput, subjectInput, minutesInput]) {
+  input.addEventListener("input", () => updateSaveState("編集中"));
+}
 
 noteInput.addEventListener("input", () => {
   updateCharCount();
   updateSaveState("編集中");
 });
 
-form.querySelector("#mood-grid").addEventListener("change", () => {
-  updateSaveState("編集中");
+dateInput.addEventListener("change", () => {
+  editingEntryId = null;
+  const previousEntry = entries
+    .filter((entry) => entry.date === dateInput.value)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+
+  if (!previousEntry) {
+    subjectInput.value = "";
+    minutesInput.value = "";
+    noteInput.value = "";
+    editingLabel.textContent = "新しい学習記録";
+    updateCharCount();
+    updateSaveState("入力待ち");
+    return;
+  }
+
+  subjectInput.value = previousEntry.subject;
+  minutesInput.value = previousEntry.minutes;
+  noteInput.value = previousEntry.note;
+  editingLabel.textContent = `${formatDate(previousEntry.date)}の記録を表示中`;
+  updateCharCount();
+  updateSaveState("過去の記録を表示");
 });
 
-clearButton.addEventListener("click", () => {
-  resetForm();
-});
+clearButton.addEventListener("click", resetForm);
 
 entryList.addEventListener("click", (event) => {
   const button = event.target.closest("button");
@@ -479,8 +283,7 @@ entryList.addEventListener("click", (event) => {
     return;
   }
 
-  const entryDate = button.dataset.date;
-  const entry = entries.find((item) => item.date === entryDate);
+  const entry = entries.find((item) => item.id === button.dataset.entryId);
 
   if (!entry) {
     return;
@@ -493,21 +296,24 @@ entryList.addEventListener("click", (event) => {
   }
 
   if (button.dataset.action === "delete") {
-    const shouldDelete = confirm(`${formatDate(entry.date)}の記録を削除しますか？`);
+    const shouldDelete = confirm(`${formatDate(entry.date)}の「${entry.subject}」の記録を削除しますか？`);
 
     if (!shouldDelete) {
       return;
     }
 
-    entries = entries.filter((item) => item.date !== entry.date);
+    entries = entries.filter((item) => item.id !== entry.id);
     saveEntries();
     render();
-    resetForm();
+
+    if (editingEntryId === entry.id) {
+      resetForm();
+    }
   }
 });
 
 searchInput.addEventListener("input", renderEntries);
-moodFilter.addEventListener("change", renderEntries);
+subjectFilter.addEventListener("change", renderEntries);
 
 dateInput.value = getTodayIso();
 updateCharCount();
