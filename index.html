@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>かんたん日記</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="editor-panel" aria-labelledby="app-title">
+        <div class="brand-row">
+          <div>
+            <p class="eyebrow">localStorage diary</p>
+            <h1 id="app-title">かんたん日記</h1>
+          </div>
+          <div class="save-state" id="save-state" aria-live="polite">未保存</div>
+        </div>
+
+        <form id="diary-form" class="diary-form">
+          <label class="field-label" for="entry-date">日付</label>
+          <input id="entry-date" name="date" type="date" required />
+
+          <fieldset class="mood-field">
+            <legend>今日の気分</legend>
+            <div class="mood-grid" id="mood-grid">
+              <label class="mood-option">
+                <input type="radio" name="mood" value="happy" required />
+                <span class="mood-face">😊</span>
+                <span>うれしい</span>
+              </label>
+              <label class="mood-option">
+                <input type="radio" name="mood" value="calm" />
+                <span class="mood-face">😌</span>
+                <span>おだやか</span>
+              </label>
+              <label class="mood-option">
+                <input type="radio" name="mood" value="normal" />
+                <span class="mood-face">🙂</span>
+                <span>ふつう</span>
+              </label>
+              <label class="mood-option">
+                <input type="radio" name="mood" value="tired" />
+                <span class="mood-face">😵‍💫</span>
+                <span>つかれた</span>
+              </label>
+              <label class="mood-option">
+                <input type="radio" name="mood" value="sad" />
+                <span class="mood-face">🥲</span>
+                <span>しょんぼり</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="field-label" for="entry-note">一言メモ</label>
+          <textarea
+            id="entry-note"
+            name="note"
+            rows="5"
+            maxlength="160"
+            placeholder="今日あったこと、今の気持ちを短く書いてみよう"
+            required
+          ></textarea>
+          <div class="note-meta">
+            <span id="editing-label">今日の記録を書いています</span>
+            <span><span id="char-count">0</span>/160</span>
+          </div>
+
+          <div class="action-row">
+            <button class="primary-button" type="submit">保存</button>
+            <button class="ghost-button" type="button" id="clear-button">入力をクリア</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="history-panel" aria-labelledby="history-title">
+        <div class="history-header">
+          <div>
+            <p class="eyebrow">my records</p>
+            <h2 id="history-title">過去ログ</h2>
+          </div>
+          <div class="stats-strip" aria-label="記録数">
+            <strong id="entry-count">0</strong>
+            <span>days</span>
+          </div>
+        </div>
+
+        <section class="biorhythm" aria-labelledby="biorhythm-title">
+          <div>
+            <p class="biorhythm-label" id="biorhythm-title">気分バイオリズム</p>
+            <strong id="biorhythm-message">記録を保存すると表示されます</strong>
+          </div>
+          <div class="rhythm-chart" id="rhythm-chart" aria-label="最近7件の気分の流れ"></div>
+          <p id="biorhythm-detail" class="biorhythm-detail">最近7件の気分の変化を表示します。</p>
+        </section>
+
+        <div class="summary-row" id="summary-row" aria-label="気分の集計"></div>
+
+        <div class="list-tools">
+          <label class="search-box" for="search-input">
+            <span>検索</span>
+            <input id="search-input" type="search" placeholder="メモから探す" />
+          </label>
+          <select id="mood-filter" aria-label="気分で絞り込み">
+            <option value="all">すべての気分</option>
+            <option value="happy">うれしい</option>
+            <option value="calm">おだやか</option>
+            <option value="normal">ふつう</option>
+            <option value="tired">つかれた</option>
+            <option value="sad">しょんぼり</option>
+          </select>
+        </div>
+
+        <div id="empty-state" class="empty-state">
+          <strong>まだ記録がありません</strong>
+          <span>今日の気分と一言メモを保存すると、ここに表示されます。</span>
+        </div>
+
+        <ul id="entry-list" class="entry-list" aria-label="保存した日記一覧"></ul>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
